@@ -28,51 +28,75 @@ const UGANDA_DISTRICTS = [
   'Masindi','Tororo','Iganga','Busia','Kasese','Mityana','Mubende',
   'Ntungamo','Bushenyi','Rukungiri','Kanungu','Ibanda','Isingiro',
   'Kiruhura','Sembabule','Lwengo','Lyantonde','Rakai','Kyotera',
-  'Bukomansimbi','Kalungu','Butebo','Kween','Bulambuli','Sironko',
+  'Bukomansimbi','Kalungu','Kween','Bulambuli','Sironko',
   'Manafwa','Bududa','Namisindwa','Butaleja','Kibuku','Pallisa',
-  'Butebo','Kumi','Ngora','Serere','Amuria','Katakwi','Kaberamaido',
+  'Kumi','Ngora','Serere','Amuria','Katakwi','Kaberamaido',
   'Dokolo','Alebtong','Otuke','Kwania','Oyam','Kole','Apac',
-  'Amolatar','Lira','Pader','Agago','Kitgum','Lamwo','Nwoya',
-  'Adjumani','Moyo','Yumbe','Koboko','Maracha','Arua','Nebbi',
+  'Amolatar','Pader','Agago','Kitgum','Lamwo','Nwoya',
+  'Adjumani','Moyo','Yumbe','Koboko','Maracha','Nebbi',
   'Zombo','Pakwach','Buliisa','Kiryandongo','Other',
 ].sort()
+
+/** Complete the onboarding for a user who already has a school */
+async function completeExistingOnboarding(
+  userId: string,
+  schoolId: string,
+  schoolName: string,
+  schoolType: string,
+  role: string,
+  auth: ReturnType<typeof useAuth>,
+  navigate: ReturnType<typeof useNavigate>
+) {
+  await supabase
+    .from('user_profiles')
+    .update({ onboarding_status: 'complete' })
+    .eq('id', userId)
+
+  // Refresh the in-memory profile so ProtectedRoute sees 'complete'
+  await auth.refreshProfile()
+
+  auth.setCurrentSchool({
+    schoolId,
+    schoolName,
+    schoolType: schoolType as 'primary' | 'secondary' | 'combined',
+    role: role as 'school_owner',
+    extraPermissions: {},
+  })
+
+  navigate('/dashboard')
+}
 
 export function SchoolOnboardingPage() {
   const auth = useAuth()
   const navigate = useNavigate()
   const [serverError, setServerError] = useState<string | null>(null)
+  const [checking, setChecking] = useState(true)
 
-  // On mount: check if user already has a school (handles page refresh after partial completion)
+  // On mount: check if user already has a school created from a previous attempt
   useEffect(() => {
     if (!auth.user) return
+
     async function checkExistingSchool() {
       const { data } = await supabase
         .from('school_memberships')
         .select('school_id, role, schools(id, name, type)')
         .eq('user_id', auth.user!.id)
         .eq('status', 'active')
-        .single()
+        .maybeSingle()
 
-      if (data) {
-        // School already exists — mark onboarding complete and redirect
-        await supabase
-          .from('user_profiles')
-          .update({ onboarding_status: 'complete' })
-          .eq('id', auth.user!.id)
-
+      if (data?.school_id) {
         const school = Array.isArray(data.schools) ? data.schools[0] : data.schools
-        if (school) {
-          auth.setCurrentSchool({
-            schoolId: data.school_id,
-            schoolName: (school as { name: string }).name,
-            schoolType: (school as { type: string }).type as 'primary' | 'secondary' | 'combined',
-            role: data.role as 'school_owner',
-            extraPermissions: {},
-          })
+        const s = school as { id: string; name: string; type: string } | null
+        if (s) {
+          await completeExistingOnboarding(
+            auth.user!.id, data.school_id, s.name, s.type, data.role, auth, navigate
+          )
+          return
         }
-        navigate('/dashboard')
       }
+      setChecking(false)
     }
+
     checkExistingSchool()
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [auth.user])
@@ -89,7 +113,26 @@ export function SchoolOnboardingPage() {
     setServerError(null)
     if (!auth.user) return
 
-    // Generate a URL-safe slug from the school name
+    // Guard: check for existing school before creating a new one
+    const { data: existing } = await supabase
+      .from('school_memberships')
+      .select('school_id, role, schools(id, name, type)')
+      .eq('user_id', auth.user.id)
+      .eq('status', 'active')
+      .maybeSingle()
+
+    if (existing?.school_id) {
+      const school = Array.isArray(existing.schools) ? existing.schools[0] : existing.schools
+      const s = school as { id: string; name: string; type: string } | null
+      if (s) {
+        await completeExistingOnboarding(
+          auth.user.id, existing.school_id, s.name, s.type, existing.role, auth, navigate
+        )
+        return
+      }
+    }
+
+    // Generate a URL-safe slug
     const slug = data.name
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, '-')
@@ -114,11 +157,7 @@ export function SchoolOnboardingPage() {
       .single()
 
     if (schoolError) {
-      if (schoolError.code === '23505') {
-        setServerError('A school with a similar name already exists. Please use a more specific name.')
-      } else {
-        setServerError('Failed to create school. Please try again.')
-      }
+      setServerError('Failed to create school. Please try again.')
       return
     }
 
@@ -133,17 +172,20 @@ export function SchoolOnboardingPage() {
       })
 
     if (memberError) {
-      setServerError('School created but failed to set up your access. Contact support.')
+      setServerError('School created but failed to set up your access. Please contact support.')
       return
     }
 
-    // 3. Mark onboarding complete
+    // 3. Mark onboarding complete in DB + refresh in-memory profile
     await supabase
       .from('user_profiles')
       .update({ onboarding_status: 'complete' })
       .eq('id', auth.user.id)
 
-    // 4. Set school context and navigate to dashboard
+    // CRITICAL: refresh profile before navigating so ProtectedRoute sees 'complete'
+    await auth.refreshProfile()
+
+    // 4. Set school context and navigate
     auth.setCurrentSchool({
       schoolId: school.id,
       schoolName: school.name,
@@ -155,10 +197,21 @@ export function SchoolOnboardingPage() {
     navigate('/dashboard')
   }
 
+  // Show spinner while checking for existing school
+  if (checking) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-primary-950 via-primary-900 to-primary-800 flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <div className="animate-spin h-10 w-10 border-4 border-primary-700 border-t-accent-400 rounded-full" />
+          <p className="text-primary-300 text-sm">Setting up your workspace…</p>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-primary-950 via-primary-900 to-primary-800 flex items-center justify-center p-4">
       <div className="w-full max-w-lg">
-        {/* Logo */}
         <div className="flex flex-col items-center mb-8">
           <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-accent-500 shadow-lg mb-4">
             <GraduationCap size={28} className="text-white" />

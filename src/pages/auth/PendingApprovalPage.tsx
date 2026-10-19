@@ -27,6 +27,13 @@ export function PendingApprovalPage() {
       if (data) {
         setStatus(data.status as RegistrationStatus)
         setRejectionReason(data.rejection_reason)
+
+        // Already approved — refresh profile and go to onboarding immediately
+        if (data.status === 'approved') {
+          await auth.refreshProfile()
+          navigate('/onboarding')
+          return
+        }
       }
       setLoading(false)
     }
@@ -48,6 +55,7 @@ export function PendingApprovalPage() {
         // If approved, redirect to onboarding
         if (data.status === 'approved') {
           clearInterval(interval)
+          await auth.refreshProfile()
           navigate('/onboarding')
         }
       }
