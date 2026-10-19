@@ -82,7 +82,7 @@ export function SchoolOnboardingPage() {
       if (schoolError.code === '23505') {
         setServerError('A school with a similar name already exists. Please use a more specific name.')
       } else {
-        setServerError('Failed to create school. Please try again.')
+        setServerError(`Failed to create school: ${schoolError.message} (code: ${schoolError.code})`)
       }
       return
     }
@@ -98,7 +98,7 @@ export function SchoolOnboardingPage() {
       })
 
     if (memberError) {
-      setServerError('School created but failed to set up your access. Contact support.')
+      setServerError(`School created but membership failed: ${memberError.message} (code: ${memberError.code})`)
       return
     }
 
