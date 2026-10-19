@@ -21,7 +21,15 @@ CREATE POLICY "schools_select" ON public.schools
   );
 
 CREATE POLICY "schools_insert" ON public.schools
-  FOR INSERT WITH CHECK (public.is_platform_admin());
+  FOR INSERT WITH CHECK (
+    public.is_platform_admin()
+    OR
+    EXISTS (
+      SELECT 1 FROM public.user_profiles up
+      WHERE up.id = auth.uid()
+        AND up.onboarding_status IN ('pending_onboarding', 'complete')
+    )
+  );
 
 CREATE POLICY "schools_update" ON public.schools
   FOR UPDATE USING (
@@ -72,8 +80,24 @@ CREATE POLICY "memberships_select" ON public.school_memberships
 -- Only school_owners can insert memberships; no self-assignment
 CREATE POLICY "memberships_insert" ON public.school_memberships
   FOR INSERT WITH CHECK (
-    public.user_has_role_in_school(school_id, ARRAY['school_owner'])
-    AND user_id <> auth.uid()  -- Cannot add yourself
+    public.is_platform_admin()
+    OR
+    -- User adding themselves as owner during onboarding
+    (
+      user_id = auth.uid()
+      AND role = 'school_owner'
+      AND EXISTS (
+        SELECT 1 FROM public.user_profiles
+        WHERE id = auth.uid()
+          AND onboarding_status IN ('pending_onboarding', 'complete')
+      )
+    )
+    OR
+    -- Existing school owner adding other staff (not themselves)
+    (
+      user_id <> auth.uid()
+      AND public.user_has_role_in_school(school_id, ARRAY['school_owner'])
+    )
   );
 
 CREATE POLICY "memberships_update" ON public.school_memberships
