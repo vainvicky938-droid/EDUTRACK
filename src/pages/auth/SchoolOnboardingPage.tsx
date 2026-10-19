@@ -77,23 +77,33 @@ export function SchoolOnboardingPage() {
     if (!auth.user) return
 
     async function checkExistingSchool() {
-      const { data } = await supabase
+      // Step 1: check membership only (no join — avoids RLS complexity)
+      const { data: membership } = await supabase
         .from('school_memberships')
-        .select('school_id, role, schools(id, name, type)')
+        .select('school_id, role')
         .eq('user_id', auth.user!.id)
         .eq('status', 'active')
         .maybeSingle()
 
-      if (data?.school_id) {
-        const school = Array.isArray(data.schools) ? data.schools[0] : data.schools
-        const s = school as { id: string; name: string; type: string } | null
-        if (s) {
-          await completeExistingOnboarding(
-            auth.user!.id, data.school_id, s.name, s.type, data.role, auth, navigate
-          )
-          return
-        }
+      if (!membership?.school_id) {
+        setChecking(false)
+        return
       }
+
+      // Step 2: fetch school details separately
+      const { data: school } = await supabase
+        .from('schools')
+        .select('id, name, type')
+        .eq('id', membership.school_id)
+        .single()
+
+      if (school) {
+        await completeExistingOnboarding(
+          auth.user!.id, school.id, school.name, school.type, membership.role, auth, navigate
+        )
+        return
+      }
+
       setChecking(false)
     }
 
@@ -114,19 +124,24 @@ export function SchoolOnboardingPage() {
     if (!auth.user) return
 
     // Guard: check for existing school before creating a new one
-    const { data: existing } = await supabase
+    const { data: existingMembership } = await supabase
       .from('school_memberships')
-      .select('school_id, role, schools(id, name, type)')
+      .select('school_id, role')
       .eq('user_id', auth.user.id)
       .eq('status', 'active')
       .maybeSingle()
 
-    if (existing?.school_id) {
-      const school = Array.isArray(existing.schools) ? existing.schools[0] : existing.schools
-      const s = school as { id: string; name: string; type: string } | null
-      if (s) {
+    if (existingMembership?.school_id) {
+      const { data: existingSchool } = await supabase
+        .from('schools')
+        .select('id, name, type')
+        .eq('id', existingMembership.school_id)
+        .single()
+
+      if (existingSchool) {
         await completeExistingOnboarding(
-          auth.user.id, existing.school_id, s.name, s.type, existing.role, auth, navigate
+          auth.user.id, existingSchool.id, existingSchool.name,
+          existingSchool.type, existingMembership.role, auth, navigate
         )
         return
       }
