@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -41,6 +41,41 @@ export function SchoolOnboardingPage() {
   const auth = useAuth()
   const navigate = useNavigate()
   const [serverError, setServerError] = useState<string | null>(null)
+
+  // On mount: check if user already has a school (handles page refresh after partial completion)
+  useEffect(() => {
+    if (!auth.user) return
+    async function checkExistingSchool() {
+      const { data } = await supabase
+        .from('school_memberships')
+        .select('school_id, role, schools(id, name, type)')
+        .eq('user_id', auth.user!.id)
+        .eq('status', 'active')
+        .single()
+
+      if (data) {
+        // School already exists — mark onboarding complete and redirect
+        await supabase
+          .from('user_profiles')
+          .update({ onboarding_status: 'complete' })
+          .eq('id', auth.user!.id)
+
+        const school = Array.isArray(data.schools) ? data.schools[0] : data.schools
+        if (school) {
+          auth.setCurrentSchool({
+            schoolId: data.school_id,
+            schoolName: (school as { name: string }).name,
+            schoolType: (school as { type: string }).type as 'primary' | 'secondary' | 'combined',
+            role: data.role as 'school_owner',
+            extraPermissions: {},
+          })
+        }
+        navigate('/dashboard')
+      }
+    }
+    checkExistingSchool()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [auth.user])
 
   const {
     register,
