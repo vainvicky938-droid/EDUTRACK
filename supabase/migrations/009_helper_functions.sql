@@ -93,7 +93,7 @@ $$;
 -- =============================================================================
 -- is_platform_admin()
 -- Returns TRUE if the current user is a platform super admin.
--- Super admins are identified by the app_metadata claim set server-side.
+-- Checks the is_platform_admin flag in user_profiles.
 -- =============================================================================
 CREATE OR REPLACE FUNCTION public.is_platform_admin()
 RETURNS BOOLEAN
@@ -103,7 +103,7 @@ STABLE
 SET search_path = public
 AS $$
   SELECT COALESCE(
-    (auth.jwt() -> 'app_metadata' ->> 'platform_admin')::BOOLEAN,
+    (SELECT is_platform_admin FROM public.user_profiles WHERE id = auth.uid()),
     FALSE
   );
 $$;

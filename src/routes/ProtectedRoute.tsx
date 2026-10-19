@@ -4,27 +4,67 @@ import { PageSpinner } from '@/components/ui'
 import type { SchoolContext } from '@/types'
 
 interface ProtectedRouteProps {
-  /** Roles allowed to access this route. If empty, any authenticated user is allowed. */
   allowedRoles?: SchoolContext['role'][]
-  /** Require an active school workspace */
   requireSchool?: boolean
+  requirePlatformAdmin?: boolean
 }
 
-export function ProtectedRoute({ allowedRoles = [], requireSchool = true }: ProtectedRouteProps) {
+export function ProtectedRoute({
+  allowedRoles = [],
+  requireSchool = true,
+  requirePlatformAdmin = false,
+}: ProtectedRouteProps) {
   const auth = useAuth()
   const location = useLocation()
 
-  // Show spinner while session is being restored
-  if (!auth.initialized) {
-    return <PageSpinner />
-  }
+  if (!auth.initialized) return <PageSpinner />
 
-  // Not authenticated — redirect to login
+  // Not authenticated
   if (!auth.user) {
     return <Navigate to="/login" state={{ from: location }} replace />
   }
 
-  // Needs a school workspace but doesn't have one yet
+  const profile = auth.profile as (typeof auth.profile & {
+    is_platform_admin?: boolean
+    onboarding_status?: string
+  }) | null
+
+  // Platform admin routes
+  if (requirePlatformAdmin) {
+    if (!profile?.is_platform_admin) {
+      return <Navigate to="/dashboard" replace />
+    }
+    return <Outlet />
+  }
+
+  // If profile not loaded yet, wait
+  if (!profile) return <PageSpinner />
+
+  // Platform admin goes straight to admin dashboard
+  if (profile.is_platform_admin) {
+    if (!location.pathname.startsWith('/admin')) {
+      return <Navigate to="/admin" replace />
+    }
+    return <Outlet />
+  }
+
+  // Non-admin users: check onboarding state
+  const onboardingStatus = profile.onboarding_status ?? 'pending_approval'
+
+  if (onboardingStatus === 'pending_approval' || onboardingStatus === 'pending_onboarding') {
+    if (onboardingStatus === 'pending_onboarding' && location.pathname === '/onboarding') {
+      return <Outlet />
+    }
+    if (onboardingStatus === 'pending_approval' && location.pathname === '/pending-approval') {
+      return <Outlet />
+    }
+    if (onboardingStatus === 'pending_onboarding') {
+      return <Navigate to="/onboarding" replace />
+    }
+    return <Navigate to="/pending-approval" replace />
+  }
+
+  // Onboarding complete — needs school context
   if (requireSchool && !auth.currentSchool) {
     return <Navigate to="/select-school" state={{ from: location }} replace />
   }
@@ -41,7 +81,6 @@ export function ProtectedRoute({ allowedRoles = [], requireSchool = true }: Prot
   return <Outlet />
 }
 
-/** Route accessible only to unauthenticated users (login, etc.) */
 export function PublicOnlyRoute() {
   const auth = useAuth()
   const location = useLocation()
@@ -49,6 +88,17 @@ export function PublicOnlyRoute() {
   if (!auth.initialized) return <PageSpinner />
 
   if (auth.user) {
+    const profile = auth.profile as (typeof auth.profile & {
+      is_platform_admin?: boolean
+      onboarding_status?: string
+    }) | null
+
+    if (profile?.is_platform_admin) return <Navigate to="/admin" replace />
+
+    const status = profile?.onboarding_status
+    if (status === 'pending_onboarding') return <Navigate to="/onboarding" replace />
+    if (status === 'pending_approval')   return <Navigate to="/pending-approval" replace />
+
     const from = (location.state as { from?: Location })?.from?.pathname ?? '/dashboard'
     return <Navigate to={from} replace />
   }

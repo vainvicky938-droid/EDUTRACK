@@ -4,7 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { Eye, EyeOff, Mail, Lock } from 'lucide-react'
 import { useAuth } from '@/stores/authStore'
-import { useNavigate, useLocation } from 'react-router-dom'
+import { useNavigate, useLocation, Link } from 'react-router-dom'
 import { Input } from '@/components/ui/Input'
 import { Button } from '@/components/ui/Button'
 import { Alert } from '@/components/ui/Alert'
@@ -103,6 +103,12 @@ export function LoginPage() {
         <a href="mailto:support@edutrack.ug" className="text-primary-600 hover:underline font-medium">
           Contact your administrator
         </a>
+      </p>
+      <p className="mt-3 text-center text-sm text-slate-500">
+        New to EduTrack?{' '}
+        <Link to="/signup" className="text-primary-600 hover:underline font-medium">
+          Register your school
+        </Link>
       </p>
     </div>
   )

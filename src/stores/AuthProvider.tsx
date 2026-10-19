@@ -4,6 +4,11 @@ import { supabase } from '@/lib/supabase'
 import type { UserProfile, SchoolContext } from '@/types'
 import { AuthContext, type AuthState } from './authStore'
 
+interface ExtendedProfile extends UserProfile {
+  is_platform_admin: boolean
+  onboarding_status: 'pending_approval' | 'pending_onboarding' | 'complete'
+}
+
 interface Props {
   children: ReactNode
 }
@@ -11,7 +16,7 @@ interface Props {
 export function AuthProvider({ children }: Props) {
   const [user, setUser] = useState<User | null>(null)
   const [session, setSession] = useState<Session | null>(null)
-  const [profile, setProfile] = useState<UserProfile | null>(null)
+  const [profile, setProfile] = useState<ExtendedProfile | null>(null)
   const [currentSchool, setCurrentSchool] = useState<SchoolContext | null>(null)
   const [loading, setLoading] = useState(false)
   const [initialized, setInitialized] = useState(false)
@@ -22,7 +27,7 @@ export function AuthProvider({ children }: Props) {
       .select('*')
       .eq('id', userId)
       .single()
-    setProfile(data ?? null)
+    setProfile((data as ExtendedProfile) ?? null)
   }, [])
 
   const refreshProfile = useCallback(async () => {
@@ -30,7 +35,6 @@ export function AuthProvider({ children }: Props) {
   }, [user, fetchProfile])
 
   useEffect(() => {
-    // Restore session on mount
     supabase.auth.getSession().then(({ data: { session: s } }) => {
       setSession(s)
       setUser(s?.user ?? null)
@@ -41,7 +45,6 @@ export function AuthProvider({ children }: Props) {
       }
     })
 
-    // Listen for auth state changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (_event, s) => {
         setSession(s)

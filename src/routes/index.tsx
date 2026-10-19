@@ -1,39 +1,64 @@
-import { createBrowserRouter } from 'react-router-dom'
+import { createBrowserRouter, Navigate } from 'react-router-dom'
 import { AppShell } from '@/components/layout/AppShell'
 import { AuthLayout } from '@/components/layout/AuthLayout'
+import { AdminShell } from '@/components/layout/AdminShell'
 import { ProtectedRoute, PublicOnlyRoute } from './ProtectedRoute'
 
-import { LoginPage } from '@/pages/auth/LoginPage'
-import { SelectSchoolPage } from '@/pages/auth/SelectSchoolPage'
-import { UnauthorizedPage } from '@/pages/auth/UnauthorizedPage'
-import { NotFoundPage } from '@/pages/auth/NotFoundPage'
-import { DashboardPage } from '@/pages/dashboard/DashboardPage'
-import { StudentsPage } from '@/pages/students/StudentsPage'
-import { StaffPage } from '@/pages/staff/StaffPage'
-import { ClassesPage } from '@/pages/classes/ClassesPage'
-import { AttendancePage } from '@/pages/attendance/AttendancePage'
-import { FeesPage } from '@/pages/fees/FeesPage'
-import { AcademicPage } from '@/pages/academic/AcademicPage'
-import { ReportsPage } from '@/pages/reports/ReportsPage'
-import { ReportCardsPage } from '@/pages/reports/ReportCardsPage'
-import { SettingsPage } from '@/pages/settings/SettingsPage'
-import { PlatformPage } from '@/pages/platform/PlatformPage'
+// Auth pages
+import { LoginPage }            from '@/pages/auth/LoginPage'
+import { SignUpPage }            from '@/pages/auth/SignUpPage'
+import { SelectSchoolPage }      from '@/pages/auth/SelectSchoolPage'
+import { PendingApprovalPage }   from '@/pages/auth/PendingApprovalPage'
+import { SchoolOnboardingPage }  from '@/pages/auth/SchoolOnboardingPage'
+import { UnauthorizedPage }      from '@/pages/auth/UnauthorizedPage'
+import { NotFoundPage }          from '@/pages/auth/NotFoundPage'
+
+// School app pages
+import { DashboardPage }    from '@/pages/dashboard/DashboardPage'
+import { StudentsPage }     from '@/pages/students/StudentsPage'
+import { StaffPage }        from '@/pages/staff/StaffPage'
+import { ClassesPage }      from '@/pages/classes/ClassesPage'
+import { AttendancePage }   from '@/pages/attendance/AttendancePage'
+import { FeesPage }         from '@/pages/fees/FeesPage'
+import { AcademicPage }     from '@/pages/academic/AcademicPage'
+import { ReportsPage }      from '@/pages/reports/ReportsPage'
+import { ReportCardsPage }  from '@/pages/reports/ReportCardsPage'
+import { SettingsPage }     from '@/pages/settings/SettingsPage'
+
+// Platform admin pages
+import { AdminDashboardPage } from '@/pages/platform/AdminDashboardPage'
+import { AdminSchoolsPage }   from '@/pages/platform/AdminSchoolsPage'
+import { AdminUsersPage }     from '@/pages/platform/AdminUsersPage'
+import { AdminSettingsPage }  from '@/pages/platform/AdminSettingsPage'
 
 export const router = createBrowserRouter([
-  // ─── Auth routes (unauthenticated only) ──────────────────────────────────
+
+  // ─── Public routes (unauthenticated only) ──────────────────────────────────
   {
     element: <PublicOnlyRoute />,
     children: [
       {
         element: <AuthLayout />,
         children: [
-          { path: '/login', element: <LoginPage /> },
+          { path: '/login',  element: <LoginPage /> },
+          { path: '/signup', element: <SignUpPage /> },
         ],
       },
     ],
   },
 
-  // ─── School selection (authenticated, no school required) ─────────────────
+  // ─── Pending approval (authenticated, no school yet) ───────────────────────
+  { path: '/pending-approval', element: <PendingApprovalPage /> },
+
+  // ─── School onboarding (authenticated, approved but no school) ────────────
+  {
+    element: <ProtectedRoute requireSchool={false} />,
+    children: [
+      { path: '/onboarding', element: <SchoolOnboardingPage /> },
+    ],
+  },
+
+  // ─── School selection (authenticated, onboarding complete) ────────────────
   {
     element: <ProtectedRoute requireSchool={false} />,
     children: [
@@ -41,7 +66,23 @@ export const router = createBrowserRouter([
     ],
   },
 
-  // ─── Main app (authenticated + active school) ─────────────────────────────
+  // ─── Platform admin routes ─────────────────────────────────────────────────
+  {
+    element: <ProtectedRoute requirePlatformAdmin requireSchool={false} />,
+    children: [
+      {
+        element: <AdminShell />,
+        children: [
+          { path: '/admin',           element: <AdminDashboardPage /> },
+          { path: '/admin/schools',   element: <AdminSchoolsPage /> },
+          { path: '/admin/users',     element: <AdminUsersPage /> },
+          { path: '/admin/settings',  element: <AdminSettingsPage /> },
+        ],
+      },
+    ],
+  },
+
+  // ─── School app (authenticated + active school) ────────────────────────────
   {
     element: <ProtectedRoute />,
     children: [
@@ -63,21 +104,8 @@ export const router = createBrowserRouter([
     ],
   },
 
-  // ─── Platform admin (owner or super_admin only) ───────────────────────────
-  {
-    element: <ProtectedRoute allowedRoles={['school_owner']} />,
-    children: [
-      {
-        element: <AppShell />,
-        children: [
-          { path: '/platform', element: <PlatformPage /> },
-        ],
-      },
-    ],
-  },
-
-  // ─── Utility routes ───────────────────────────────────────────────────────
+  // ─── Utility routes ────────────────────────────────────────────────────────
   { path: '/unauthorized', element: <UnauthorizedPage /> },
-  { path: '/', element: <ProtectedRoute />, children: [{ index: true, element: <DashboardPage /> }] },
-  { path: '*', element: <NotFoundPage /> },
+  { path: '/',             element: <Navigate to="/dashboard" replace /> },
+  { path: '*',             element: <NotFoundPage /> },
 ])
