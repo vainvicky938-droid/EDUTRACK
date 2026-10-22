@@ -2,6 +2,7 @@ import { Navigate, Outlet, useLocation } from 'react-router-dom'
 import { useAuth } from '@/stores/authStore'
 import { PageSpinner } from '@/components/ui'
 import type { SchoolContext } from '@/types'
+import type { ExtendedProfile } from '@/stores/AuthProvider'
 
 interface ProtectedRouteProps {
   allowedRoles?: SchoolContext['role'][]
@@ -17,6 +18,7 @@ export function ProtectedRoute({
   const auth = useAuth()
   const location = useLocation()
 
+  // Wait for session restore
   if (!auth.initialized) return <PageSpinner />
 
   // Not authenticated
@@ -24,23 +26,20 @@ export function ProtectedRoute({
     return <Navigate to="/login" state={{ from: location }} replace />
   }
 
-  const profile = auth.profile as (typeof auth.profile & {
-    is_platform_admin?: boolean
-    onboarding_status?: string
-  }) | null
+  // Wait for profile to load
+  if (!auth.profile) return <PageSpinner />
 
-  // Platform admin routes
+  const profile = auth.profile as ExtendedProfile
+
+  // ── Platform admin ──────────────────────────────────────────────────────────
   if (requirePlatformAdmin) {
-    if (!profile?.is_platform_admin) {
+    if (!profile.is_platform_admin) {
       return <Navigate to="/dashboard" replace />
     }
     return <Outlet />
   }
 
-  // If profile not loaded yet, wait
-  if (!profile) return <PageSpinner />
-
-  // Platform admin goes straight to admin dashboard
+  // Redirect platform admin away from school routes
   if (profile.is_platform_admin) {
     if (!location.pathname.startsWith('/admin')) {
       return <Navigate to="/admin" replace />
@@ -48,37 +47,33 @@ export function ProtectedRoute({
     return <Outlet />
   }
 
-  // Non-admin users: check onboarding state
-  const onboardingStatus = profile.onboarding_status ?? 'pending_approval'
+  // ── Onboarding state machine ────────────────────────────────────────────────
+  const status = profile.onboarding_status ?? 'pending_approval'
 
-  if (onboardingStatus === 'pending_approval' || onboardingStatus === 'pending_onboarding') {
-    if (onboardingStatus === 'pending_onboarding' && location.pathname === '/onboarding') {
-      return <Outlet />
+  // User is complete — allow all school routes
+  if (status === 'complete') {
+    if (requireSchool && !auth.currentSchool) {
+      return <Navigate to="/select-school" state={{ from: location }} replace />
     }
-    if (onboardingStatus === 'pending_approval' && location.pathname === '/pending-approval') {
-      return <Outlet />
+    if (
+      allowedRoles.length > 0 &&
+      auth.currentSchool &&
+      !allowedRoles.includes(auth.currentSchool.role)
+    ) {
+      return <Navigate to="/unauthorized" replace />
     }
-    if (onboardingStatus === 'pending_onboarding') {
-      return <Navigate to="/onboarding" replace />
-    }
-    return <Navigate to="/pending-approval" replace />
+    return <Outlet />
   }
 
-  // Onboarding complete — needs school context
-  if (requireSchool && !auth.currentSchool) {
-    return <Navigate to="/select-school" state={{ from: location }} replace />
+  // User needs onboarding — only allow /onboarding
+  if (status === 'pending_onboarding') {
+    if (location.pathname === '/onboarding') return <Outlet />
+    return <Navigate to="/onboarding" replace />
   }
 
-  // Role check
-  if (
-    allowedRoles.length > 0 &&
-    auth.currentSchool &&
-    !allowedRoles.includes(auth.currentSchool.role)
-  ) {
-    return <Navigate to="/unauthorized" replace />
-  }
-
-  return <Outlet />
+  // User is pending approval — only allow /pending-approval
+  if (location.pathname === '/pending-approval') return <Outlet />
+  return <Navigate to="/pending-approval" replace />
 }
 
 export function PublicOnlyRoute() {
@@ -88,18 +83,19 @@ export function PublicOnlyRoute() {
   if (!auth.initialized) return <PageSpinner />
 
   if (auth.user) {
-    const profile = auth.profile as (typeof auth.profile & {
-      is_platform_admin?: boolean
-      onboarding_status?: string
-    }) | null
+    // Don't redirect until profile is loaded
+    if (!auth.profile) return <PageSpinner />
 
-    if (profile?.is_platform_admin) return <Navigate to="/admin" replace />
+    const profile = auth.profile as ExtendedProfile
 
-    const status = profile?.onboarding_status
+    if (profile.is_platform_admin) return <Navigate to="/admin" replace />
+
+    const status = profile.onboarding_status ?? 'pending_approval'
     if (status === 'pending_onboarding') return <Navigate to="/onboarding" replace />
     if (status === 'pending_approval')   return <Navigate to="/pending-approval" replace />
 
-    const from = (location.state as { from?: Location })?.from?.pathname ?? '/dashboard'
+    // complete
+    const from = (location.state as { from?: { pathname: string } })?.from?.pathname ?? '/dashboard'
     return <Navigate to={from} replace />
   }
 
