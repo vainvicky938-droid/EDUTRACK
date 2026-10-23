@@ -192,7 +192,7 @@ export function SchoolOnboardingPage() {
       .single()
 
     if (schoolError) {
-      setServerError('Failed to create school. Please try again.')
+      setServerError(`School error (${schoolError.code}): ${schoolError.message}`)
       return
     }
 
@@ -207,9 +207,7 @@ export function SchoolOnboardingPage() {
       })
 
     if (memberError) {
-      setServerError(
-        'School created but failed to set up your access. Please contact support.'
-      )
+      setServerError(`Membership error (${memberError.code}): ${memberError.message}`)
       return
     }
 
