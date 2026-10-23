@@ -87,9 +87,9 @@ export function SignUpPage() {
 
   return (
     <div>
-      <h2 className="text-xl font-bold text-slate-900 mb-1">Create your account</h2>
+      <h2 className="text-xl font-bold text-slate-900 mb-1">Request Access</h2>
       <p className="text-sm text-slate-500 mb-6">
-        Register your school on EduTrack. Your account will be reviewed before access is granted.
+        Submit your details to register your school on EduTrack. An administrator will review and approve your account.
       </p>
 
       {serverError && (
@@ -187,7 +187,7 @@ export function SignUpPage() {
           loading={isSubmitting}
           className="w-full"
         >
-          Submit Registration
+          Submit Request
         </Button>
       </form>
 

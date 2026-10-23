@@ -2,10 +2,11 @@ import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { Eye, EyeOff, Mail, Lock } from 'lucide-react'
+import { Eye, EyeOff, Mail, Lock, X, Send } from 'lucide-react'
 import { useAuth } from '@/stores/authStore'
 import { useNavigate, useLocation, Link } from 'react-router-dom'
 import { Input } from '@/components/ui/Input'
+import { Textarea } from '@/components/ui/Textarea'
 import { Button } from '@/components/ui/Button'
 import { Alert } from '@/components/ui/Alert'
 
@@ -22,8 +23,14 @@ export function LoginPage() {
   const location = useLocation()
   const [showPassword, setShowPassword] = useState(false)
   const [serverError, setServerError] = useState<string | null>(null)
+  const [showContactModal, setShowContactModal] = useState(false)
+  const [contactSent, setContactSent] = useState(false)
+  const [contactEmail, setContactEmail] = useState('')
+  const [contactMessage, setContactMessage] = useState('')
 
-  const from = (location.state as { from?: { pathname: string } })?.from?.pathname ?? '/dashboard'
+  const from =
+    (location.state as { from?: { pathname: string } })?.from?.pathname ??
+    '/dashboard'
 
   const {
     register,
@@ -43,13 +50,31 @@ export function LoginPage() {
     navigate(from, { replace: true })
   }
 
+  const handleContactSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    // In MVP: just shows confirmation. Email integration comes in a later phase.
+    setContactSent(true)
+    setTimeout(() => {
+      setShowContactModal(false)
+      setContactSent(false)
+      setContactEmail('')
+      setContactMessage('')
+    }, 3000)
+  }
+
   return (
     <div>
       <h2 className="text-xl font-bold text-slate-900 mb-1">Sign in to EduTrack</h2>
-      <p className="text-sm text-slate-500 mb-6">Enter your credentials to access your school workspace.</p>
+      <p className="text-sm text-slate-500 mb-6">
+        Enter your credentials to access your school workspace.
+      </p>
 
       {serverError && (
-        <Alert variant="error" className="mb-4" onDismiss={() => setServerError(null)}>
+        <Alert
+          variant="error"
+          className="mb-4"
+          onDismiss={() => setServerError(null)}
+        >
           {serverError}
         </Alert>
       )}
@@ -98,18 +123,104 @@ export function LoginPage() {
         </Button>
       </form>
 
-      <p className="mt-5 text-center text-sm text-slate-500">
-        Having trouble signing in?{' '}
-        <a href="mailto:support@edutrack.ug" className="text-primary-600 hover:underline font-medium">
-          Contact your administrator
-        </a>
-      </p>
-      <p className="mt-3 text-center text-sm text-slate-500">
-        New to EduTrack?{' '}
-        <Link to="/signup" className="text-primary-600 hover:underline font-medium">
-          Register your school
-        </Link>
-      </p>
+      {/* Bottom links */}
+      <div className="mt-5 space-y-2 text-center text-sm text-slate-500">
+        <p>
+          Having trouble signing in?{' '}
+          <button
+            onClick={() => setShowContactModal(true)}
+            className="text-primary-600 hover:underline font-medium"
+          >
+            Contact administrator
+          </button>
+        </p>
+        <p>
+          New to EduTrack?{' '}
+          <Link
+            to="/signup"
+            className="text-primary-600 hover:underline font-medium"
+          >
+            Request access
+          </Link>
+        </p>
+      </div>
+
+      {/* Contact Admin Modal */}
+      {showContactModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div
+            className="absolute inset-0 bg-slate-900/50"
+            onClick={() => setShowContactModal(false)}
+          />
+          <div className="relative z-10 w-full max-w-md rounded-2xl bg-white shadow-xl p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-base font-semibold text-slate-900">
+                Contact Administrator
+              </h3>
+              <button
+                onClick={() => setShowContactModal(false)}
+                className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {contactSent ? (
+              <div className="py-6 text-center">
+                <div className="flex justify-center mb-3">
+                  <div className="rounded-full bg-success-100 p-3">
+                    <Send size={24} className="text-success-600" />
+                  </div>
+                </div>
+                <p className="font-medium text-slate-900">Message received</p>
+                <p className="text-sm text-slate-500 mt-1">
+                  The administrator will get back to you shortly.
+                </p>
+              </div>
+            ) : (
+              <form onSubmit={handleContactSubmit} className="space-y-4">
+                <p className="text-sm text-slate-500">
+                  Send a message to the EduTrack platform administrator.
+                </p>
+                <Input
+                  label="Your email"
+                  type="email"
+                  placeholder="you@example.com"
+                  required
+                  leftElement={<Mail size={16} />}
+                  value={contactEmail}
+                  onChange={(e) => setContactEmail(e.target.value)}
+                />
+                <Textarea
+                  label="Message"
+                  placeholder="Describe your issue or question…"
+                  required
+                  value={contactMessage}
+                  onChange={(e) => setContactMessage(e.target.value)}
+                />
+                <div className="flex gap-3 justify-end">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowContactModal(false)}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    type="submit"
+                    variant="primary"
+                    size="sm"
+                    disabled={!contactEmail || !contactMessage}
+                  >
+                    Send Message
+                  </Button>
+                </div>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
